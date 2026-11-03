@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block title %}Main Dashboard{% endblock %}
+{% block page_title %}Operational Dashboard & Quality Overview{% endblock %}
+
+{% block content %}
+<!-- Top Welcome Banner -->
+<div class="card border-0 bg-primary text-white mb-4 shadow-sm overflow-hidden" style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%) !important;">
+    <div class="card-body p-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+        <div>
+            <span class="badge bg-white bg-opacity-25 text-white mb-2 px-3 py-1">NASA MDP Machine Learning Engine</span>
+            <h3 class="fw-bold mb-1">Welcome, {{ current_user.full_name or current_user.username }}!</h3>
+            <p class="mb-0 text-white-50">Enterprise Software Defect Prediction & Static Code Quality Monitoring System</p>
+        </div>
+        <div class="mt-3 mt-md-0 d-flex gap-2">
+            <a href="{{ url_for('code_analysis.code_analysis') }}" class="btn btn-light text-primary fw-semibold px-3 shadow-sm">
+                <i class="bi bi-code-slash me-1"></i> New Code Analysis
+            </a>
+            <a href="{{ url_for('prediction.prediction') }}" class="btn btn-outline-light fw-semibold px-3">
+                <i class="bi bi-cpu me-1"></i> Defect Prediction
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Database Connectivity Notice -->
+{% if not conn_info.connected %}
+<div class="alert alert-warning border-warning d-flex align-items-center mb-4 shadow-sm" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning"></i>
+    <div>
+        <strong>Database Notice:</strong> {{ conn_info.message }}
+        <div class="small">Configure <code>MONGODB_URI</code> in <code>.env</code> or ensure local MongoDB is running to persist analyses.</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Row 1: Key Performance Metrics -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card metric-card border-start border-4 border-primary h-100 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="metric-label">Total Predictions</div>
+                    <div class="metric-value text-dark">{{ stats.total_predictions }}</div>
+                    <small class="text-muted"><i class="bi bi-file-earmark-code me-1"></i>{{ stats.total_analyses }} Code Inspections</small>
+                </div>
+                <div class="metric-icon bg-primary bg-opacity-10 text-primary">
+                    <i class="bi bi-calculator"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card metric-card border-start border-4 border-danger h-100 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="metric-label">Defective Flags</div>
+                    <div class="metric-value text-danger">{{ stats.defective_count }}</div>
+                    <small class="text-danger fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>High Risk Modules</small>
+                </div>
+                <div class="metric-icon bg-danger bg-opacity-10 text-danger">
+                    <i class="bi bi-bug"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card metric-card border-start border-4 border-success h-100 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="metric-label">Non-Defective</div>
+                    <div class="metric-value text-success">{{ stats.non_defective_count }}</div>
+                    <small class="text-success fw-semibold"><i class="bi bi-check2-circle me-1"></i>Verified Clean</small>
+                </div>
+                <div class="metric-icon bg-success bg-opacity-10 text-success">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card metric-card border-start border-4 border-warning h-100 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="metric-label">Defect Detection Rate</div>
+                    <div class="metric-value text-dark">{{ stats.defect_rate }}%</div>
+                    <small class="text-muted"><i class="bi bi-funnel me-1"></i>Threshold 0.30</small>
+                </div>
+                <div class="metric-icon bg-warning bg-opacity-10 text-warning">
+                    <i class="bi bi-percent"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: Secondary Indicators -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+        <div class="card p-3 shadow-sm d-flex flex-row align-items-center gap-3">
+            <div class="rounded-3 bg-danger bg-opacity-10 text-danger p-3">
+                <i class="bi bi-shield-slash fs-4"></i>
+            </div>
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">{{ stats.total_errors }}</h5>
+                <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Critical & High Errors Flagged</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="card p-3 shadow-sm d-flex flex-row align-items-center gap-3">
+            <div class="rounded-3 bg-warning bg-opacity-10 text-warning p-3">
+                <i class="bi bi-exclamation-triangle fs-4"></i>
+            </div>
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">{{ stats.total_warnings }}</h5>
+                <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Static Code Warnings & Notices</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="card p-3 shadow-sm d-flex flex-row align-items-center gap-3">
+            <div class="rounded-3 bg-info bg-opacity-10 text-info p-3">
+                <i class="bi bi-code-square fs-4"></i>
+            </div>
+            <div>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-primary">Py: {{ stats.python_count }}</span>
+                    <span class="badge bg-warning text-dark">Java: {{ stats.java_count }}</span>
+                    <span class="badge bg-secondary">C: {{ stats.c_count }}</span>
+                </div>
+                <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Language Breakdown</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 3: Interactive Charts -->
+<div class="row g-4 mb-4">
+    <!-- Chart 1: Defect Distribution -->
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header d-flex justify-content-between align-items-center py-3">
+                <span class="fw-semibold"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>Defect Prediction Distribution</span>
+                <span class="badge bg-light text-muted">Real-Time</span>
+            </div>
+            <div class="card-body d-flex flex-column justify-content-center align-items-center p-4">
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="defectDistributionChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-center gap-4 mt-3 small">
+                    <div class="d-flex align-items-center">
+                        <span class="d-inline-block rounded-circle me-1" style="width: 12px; height: 12px; background-color: #ef4444;"></span>
+                        <span>Defective ({{ stats.defective_count }})</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="d-inline-block rounded-circle me-1" style="width: 12px; height: 12px; background-color: #10b981;"></span>
+                        <span>Non-Defective ({{ stats.non_defective_count }})</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart 2: Language & Severity Distribution -->
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header d-flex justify-content-between align-items-center py-3">
+                <span class="fw-semibold"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Language Analysis Activity</span>
+                <span class="badge bg-light text-muted">By Module</span>
+            </div>
+            <div class="card-body p-4">
+                <div style="position: relative; height: 260px; width: 100%;">
+                    <canvas id="languageActivityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 4: Recent Prediction History Table -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+        <span class="fw-semibold"><i class="bi bi-clock-history me-2 text-primary"></i>Recent Code Analysis & Prediction Activity</span>
+        <a href="{{ url_for('dashboard.history') }}" class="btn btn-outline-primary btn-sm">View Full History</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light text-muted small text-uppercase">
+                <tr>
+                    <th>Analysis ID</th>
+                    <th>File Name</th>
+                    <th>Language</th>
+                    <th>Prediction</th>
+                    <th>Defect Probability</th>
+                    <th>Errors / Warnings</th>
+                    <th>Date Analyzed</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if recent_analyses %}
+                    {% for a in recent_analyses %}
+                    <tr>
+                        <td class="fw-semibold text-primary">#{{ a.analysis_id }}</td>
+                        <td>
+                            <i class="bi bi-file-earmark-code me-1 text-muted"></i>
+                            <strong>{{ a.file_name }}</strong>
+                        </td>
+                        <td>
+                            <span class="badge {% if a.programming_language == 'Python' %}bg-primary{% elif a.programming_language == 'Java' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                {{ a.programming_language }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if 'DEFECTIVE' in a.prediction_result and 'NON' not in a.prediction_result %}
+                                <span class="badge bg-danger"><i class="bi bi-exclamation-octagon me-1"></i>DEFECTIVE</span>
+                            {% else %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>NON-DEFECTIVE</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
+                                    <div class="progress-bar {% if a.defect_probability >= 0.30 %}bg-danger{% else %}bg-success{% endif %}"
+                                         style="width: {{ (a.defect_probability * 100)|round(1) }}%;"></div>
+                                </div>
+                                <span class="small fw-semibold">{{ (a.defect_probability * 100)|round(1) }}%</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">{{ a.error_count }} Errors</span>
+                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">{{ a.warning_count }} Warns</span>
+                        </td>
+                        <td class="small text-muted">
+                            {{ a.analysis_date.strftime('%Y-%m-%d %H:%M') if a.analysis_date else 'Recent' }}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('code_analysis.code_analysis', view_id=a.analysis_id) }}" class="btn btn-sm btn-outline-secondary" title="View Inspection Details">
+                                <i class="bi bi-eye"></i> Details
+                            </a>
+                            <a href="{{ url_for('code_analysis.download_report', analysis_id=a.analysis_id) }}" class="btn btn-sm btn-outline-primary" title="Download PDF Report">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                            No code analysis records yet. Click <a href="{{ url_for('code_analysis.code_analysis') }}">New Code Analysis</a> to run your first inspection!
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // 1. Defect Distribution Doughnut Chart
+    const defectCtx = document.getElementById("defectDistributionChart");
+    if (defectCtx) {
+        const defective = {{ stats.defective_count }};
+        const nonDefective = {{ stats.non_defective_count }};
+
+        new Chart(defectCtx, {
+            type: "doughnut",
+            data: {
+                labels: ["Defective", "Non-Defective"],
+                datasets: [{
+                    data: [defective, nonDefective],
+                    backgroundColor: ["#ef4444", "#10b981"],
+                    hoverBackgroundColor: ["#dc2626", "#059669"],
+                    borderWidth: 2,
+                    borderColor: "#ffffff"
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "65%",
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+
+    // 2. Language Activity Bar Chart
+    const langCtx = document.getElementById("languageActivityChart");
+    if (langCtx) {
+        new Chart(langCtx, {
+            type: "bar",
+            data: {
+                labels: ["Python", "Java", "C / C++"],
+                datasets: [{
+                    label: "Analyzed Modules",
+                    data: [{{ stats.python_count }}, {{ stats.java_count }}, {{ stats.c_count }}],
+                    backgroundColor: ["#2563eb", "#f59e0b", "#64748b"],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

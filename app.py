@@ -1,78 +1,122 @@
+"""
+AI-Based Multi-Language Software Defect Prediction and Source Code Analysis System
+Main Application Entrypoint
+Integrates SQLite Database, Authentication, Multi-Language Static Analyzers (Python, Java, C),
+NASA 21-Metric Machine Learning Defect Prediction (Random Forest), and PDF Report Generation.
+"""
+
+import os
 import streamlit as st
 import pandas as pd
-import numpy as np
-import ast
-import tokenize
-import io
-import math
-import keyword
-import joblib
-import re
+from datetime import datetime
+from dotenv import load_dotenv
 
-# ============================================================
-# PAGE
-# ============================================================
+# Load environment configuration
+load_dotenv()
 
+# Project modular imports
+import database as db
+import authentication as auth
+import code_analyzer
+import report_generator
+import dashboard
+from feature_extractor import MODEL_FEATURES
+
+# Initialize database schema on startup
+db.init_db()
+
+# =====================================================================
+# STREAMLIT PAGE CONFIGURATION
+# =====================================================================
 st.set_page_config(
-    page_title="Software Defect Prediction",
-    page_icon="🐞",
-    layout="wide"
+    page_title="AI Multi-Language Software Defect Prediction System",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("🐞 Software Defect Prediction")
-st.write(
-    "Enter Python code to analyze software metrics and predict "
-    "whether the code is defective or non-defective."
-)
+# Initialize user session state
+auth.init_session()
 
-# ============================================================
-# MODEL
-# ============================================================
+# Custom Professional Styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #1E3A8A;
+        margin-bottom: 0.2rem;
+    }
+    .sub-header {
+        font-size: 0.95rem;
+        color: #4B5563;
+        margin-bottom: 1.2rem;
+    }
+    .metric-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    .stButton>button {
+        border-radius: 6px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-MODEL_FILE = "random_forest_defect_model.pkl"
 
-try:
-    model = joblib.load(MODEL_FILE)
-except Exception as e:
-    st.error("Model could not be loaded.")
-    st.code(str(e))
+# =====================================================================
+# AUTHENTICATION GUARD
+# =====================================================================
+if not auth.is_authenticated():
+    auth.render_auth_page()
     st.stop()
 
-# ============================================================
-# EXACT 21 FEATURES USED BY YOUR TRAINED MODEL
-# ============================================================
 
-FEATURES = [
-    "loc",
-    "cyclomatic_complexity",
-    "essential_complexity",
-    "design_complexity",
-    "halstead_total_operators_operands",
-    "halstead_volume",
-    "halstead_program_length",
-    "halstead_difficulty",
-    "halstead_intelligence",
-    "halstead_effort",
-    "halstead_bugs",
-    "halstead_time",
-    "loc_code",
-    "loc_comment",
-    "loc_blank",
-    "loc_code_and_comment",
-    "unique_operators",
-    "unique_operands",
-    "total_operators",
-    "total_operands",
-    "branch_count"
+# =====================================================================
+# AUTHENTICATED USER WORKSPACE
+# =====================================================================
+user = auth.get_current_user()
+user_id = user["user_id"]
+
+# Sidebar Navigation
+st.sidebar.markdown("""
+    <div style="text-align: center; padding-bottom: 10px;">
+        <h3 style="color: #1E3A8A; margin: 0;">🛡️ CodeDefect AI</h3>
+        <span style="font-size: 0.78rem; color: #6B7280;">Enterprise Quality & Defect Engine</span>
+    </div>
+""", unsafe_allow_html=True)
+
+auth.render_sidebar_user_info()
+
+nav_options = [
+    "📊 User Dashboard",
+    "🔍 New Code Analysis",
+    "📜 Analysis History",
+    "📑 Generated Reports",
+    "👤 User Profile"
 ]
 
-# ============================================================
-# PYTHON CODE INPUT
-# ============================================================
+if auth.is_admin():
+    nav_options.append("🛡️ Admin Dashboard")
 
-default_code = """def calculate_average(numbers):
+# Navigation selector
+selected_page = st.sidebar.radio(
+    "Navigation Menu",
+    nav_options,
+    index=nav_options.index(st.session_state.current_page) if st.session_state.current_page in nav_options else 0
+)
+st.session_state.current_page = selected_page
+
+st.sidebar.divider()
+st.sidebar.caption("System Status: 🟢 Online | NASA ML Engine Active")
+
+
+# =====================================================================
+# DEFAULT SAMPLE CODE FOR MULTI-LANGUAGE DEMONSTRATION
+# =====================================================================
+SAMPLE_CODES = {
+    "Python": '''def calculate_average(numbers):
     total = 0
-
     for number in numbers:
         total += number
 
@@ -81,1218 +125,376 @@ default_code = """def calculate_average(numbers):
     else:
         return 0
 
-
 values = [10, 20, 30, 40]
 result = calculate_average(values)
-print(result)
-"""
+print("Average is:", result)
+''',
+    "Java": '''public class AverageCalculator {
+    public static double computeAverage(int[] numbers) {
+        if (numbers == null || numbers.length == 0) {
+            return 0.0;
+        }
+        int sum = 0;
+        for (int i = 0; i < numbers.length; i++) {
+            sum += numbers[i];
+        }
+        return (double) sum / numbers.length;
+    }
 
-code = st.text_area(
-    "Enter Python Code",
-    value=default_code,
-    height=350
-)
+    public static void main(String[] args) {
+        int[] data = {10, 20, 30, 40};
+        System.out.println("Average: " + computeAverage(data));
+    }
+}
+''',
+    "C": '''#include <stdio.h>
 
-# ============================================================
-# TOKEN ANALYSIS
-# ============================================================
+double compute_average(int arr[], int size) {
+    if (size <= 0) {
+        return 0.0;
+    }
+    int sum = 0;
+    for (int i = 0; i < size; i++) {
+        sum += arr[i];
+    }
+    return (double) sum / size;
+}
 
-PYTHON_KEYWORDS = set(keyword.kwlist)
-
-# Python punctuation is excluded from the software operator count
-# because we want meaningful programming operators.
-MEANINGFUL_OPERATORS = {
-    "+", "-", "*", "/", "//", "%", "**",
-    "==", "!=", "<", "<=", ">", ">=",
-    "=", "+=", "-=", "*=", "/=", "//=",
-    "%=", "**=", "&=", "|=", "^=", ">>=", "<<=",
-    "&", "|", "^", "~", "<<", ">>",
-    ":=", "@", "@=",
-    "and", "or", "not", "in", "is"
+int main() {
+    int data[] = {10, 20, 30, 40};
+    int count = sizeof(data) / sizeof(data[0]);
+    double avg = compute_average(data, count);
+    printf("Average is: %.2f\\n", avg);
+    return 0;
+}
+'''
 }
 
 
-def tokenize_code(source):
-    """
-    Extract Python operators and operands using Python's tokenizer.
-    """
-
-    operators = []
-    operands = []
-    comments = []
-
-    try:
-        tokens = tokenize.generate_tokens(
-            io.StringIO(source).readline
-        )
-
-        for tok in tokens:
-
-            tok_type = tok.type
-            tok_string = tok.string
-
-            # Comments
-            if tok_type == tokenize.COMMENT:
-                comments.append(tok_string)
-                continue
-
-            # Operators
-            if tok_type == tokenize.OP:
-
-                if tok_string in MEANINGFUL_OPERATORS:
-                    operators.append(tok_string)
-
-                continue
-
-            # Python keyword operators
-            if tok_type == tokenize.NAME:
-
-                if tok_string in {"and", "or", "not", "in", "is"}:
-                    operators.append(tok_string)
-
-                elif tok_string not in PYTHON_KEYWORDS:
-                    operands.append(tok_string)
-
-                continue
-
-            # Numeric/string constants
-            if tok_type in {
-                tokenize.NUMBER,
-                tokenize.STRING
-            }:
-                operands.append(tok_string)
-
-    except Exception:
-        pass
-
-    return operators, operands, comments
-
-
-# ============================================================
-# AST ANALYSIS
-# ============================================================
-
-class CodeAnalyzer(ast.NodeVisitor):
-
-    def __init__(self):
-
-        self.functions = 0
-        self.classes = 0
-
-        self.loops = 0
-        self.conditions = 0
-        self.branches = 0
-
-        self.try_blocks = 0
-        self.exceptions = 0
-
-        self.calls = 0
-        self.recursion = 0
-
-        self.max_nesting = 0
-        self.current_nesting = 0
-
-        self.divisions = 0
-        self.dangerous_calls = 0
-
-        self.return_count = 0
-        self.import_count = 0
-
-        self.function_names = set()
-
-    # -------------------------
-    # Nesting
-    # -------------------------
-
-    def enter_nesting(self):
-
-        self.current_nesting += 1
-
-        self.max_nesting = max(
-            self.max_nesting,
-            self.current_nesting
-        )
-
-    def leave_nesting(self):
-
-        self.current_nesting = max(
-            0,
-            self.current_nesting - 1
-        )
-
-    # -------------------------
-    # Functions
-    # -------------------------
-
-    def visit_FunctionDef(self, node):
-
-        self.functions += 1
-
-        self.function_names.add(node.name)
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    def visit_AsyncFunctionDef(self, node):
-
-        self.functions += 1
-
-        self.function_names.add(node.name)
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    # -------------------------
-    # Classes
-    # -------------------------
-
-    def visit_ClassDef(self, node):
-
-        self.classes += 1
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    # -------------------------
-    # Loops
-    # -------------------------
-
-    def visit_For(self, node):
-
-        self.loops += 1
-        self.branches += 1
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    def visit_AsyncFor(self, node):
-
-        self.loops += 1
-        self.branches += 1
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    def visit_While(self, node):
-
-        self.loops += 1
-        self.branches += 1
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    # -------------------------
-    # Conditions
-    # -------------------------
-
-    def visit_If(self, node):
-
-        self.conditions += 1
-        self.branches += 1
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    def visit_IfExp(self, node):
-
-        self.conditions += 1
-        self.branches += 1
-
-        self.generic_visit(node)
-
-    # -------------------------
-    # Match
-    # -------------------------
-
-    def visit_Match(self, node):
-
-        self.branches += len(node.cases)
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    # -------------------------
-    # Try / Except
-    # -------------------------
-
-    def visit_Try(self, node):
-
-        self.try_blocks += 1
-
-        self.branches += len(node.handlers)
-
-        self.exceptions += len(node.handlers)
-
-        self.enter_nesting()
-
-        self.generic_visit(node)
-
-        self.leave_nesting()
-
-    # -------------------------
-    # Calls
-    # -------------------------
-
-    def visit_Call(self, node):
-
-        self.calls += 1
-
-        function_name = ""
-
-        if isinstance(node.func, ast.Name):
-            function_name = node.func.id
-
-        elif isinstance(node.func, ast.Attribute):
-            function_name = node.func.attr
-
-        dangerous = {
-            "eval",
-            "exec",
-            "compile",
-            "__import__",
-            "system",
-            "popen"
-        }
-
-        if function_name in dangerous:
-            self.dangerous_calls += 1
-
-        self.generic_visit(node)
-
-    # -------------------------
-    # Division
-    # -------------------------
-
-    def visit_BinOp(self, node):
-
-        if isinstance(
-            node.op,
-            (
-                ast.Div,
-                ast.FloorDiv
+# =====================================================================
+# PAGE 1: USER DASHBOARD
+# =====================================================================
+if selected_page == "📊 User Dashboard":
+    dashboard.render_user_dashboard(user_id)
+
+
+# =====================================================================
+# PAGE 2: NEW CODE ANALYSIS (FILE UPLOAD & CODE EDITOR)
+# =====================================================================
+elif selected_page == "🔍 New Code Analysis":
+    st.markdown('<div class="main-header">🔍 Multi-Language Source Code Analyzer</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Select programming language, upload source files or type code directly to inspect quality, security, and ML defect likelihood.</div>', unsafe_allow_html=True)
+
+    input_tab1, input_tab2 = st.tabs(["💻 Interactive Code Editor", "📁 File Upload"])
+
+    source_code_input = ""
+    target_filename = "untitled_code.py"
+    selected_language = "Python"
+
+    # -------------------------------------------------------------
+    # METHOD B: DIRECT CODE INPUT
+    # -------------------------------------------------------------
+    with input_tab1:
+        col_c1, col_c2, col_c3 = st.columns([1, 1, 1])
+        with col_c1:
+            selected_language = st.selectbox(
+                "Programming Language",
+                ["Python", "Java", "C"],
+                key="editor_lang"
             )
-        ):
-            self.divisions += 1
-
-        self.generic_visit(node)
-
-    # -------------------------
-    # Return
-    # -------------------------
-
-    def visit_Return(self, node):
-
-        self.return_count += 1
-
-        self.generic_visit(node)
-
-    # -------------------------
-    # Imports
-    # -------------------------
-
-    def visit_Import(self, node):
-
-        self.import_count += 1
-
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node):
-
-        self.import_count += 1
-
-        self.generic_visit(node)
-
-
-# ============================================================
-# HALSTEAD METRICS
-# ============================================================
-
-def calculate_halstead(operators, operands):
-
-    total_operators = len(operators)
-    total_operands = len(operands)
-
-    unique_operators = len(set(operators))
-    unique_operands = len(set(operands))
-
-    program_length = (
-        total_operators +
-        total_operands
-    )
-
-    vocabulary = (
-        unique_operators +
-        unique_operands
-    )
-
-    if vocabulary > 0 and program_length > 0:
-
-        volume = (
-            program_length *
-            math.log2(vocabulary)
-        )
-
-    else:
-
-        volume = 0.0
-
-    if unique_operators > 0:
-
-        difficulty = (
-            (unique_operators / 2)
-            *
-            (
-                total_operands /
-                max(unique_operands, 1)
+        with col_c2:
+            target_filename = st.text_input(
+                "File Name",
+                value=f"sample.{'py' if selected_language == 'Python' else 'java' if selected_language == 'Java' else 'c'}",
+                key="editor_fname"
             )
+        with col_c3:
+            load_sample = st.button("📋 Load Sample Code", use_container_width=True)
+
+        if load_sample or "current_editor_code" not in st.session_state:
+            st.session_state.current_editor_code = SAMPLE_CODES.get(selected_language, "")
+
+        code_text = st.text_area(
+            "Source Code Input",
+            value=st.session_state.current_editor_code,
+            height=340,
+            key="code_editor_area",
+            help="Type or paste your Python, Java, or C source code here."
+        )
+        source_code_input = code_text
+
+        col_b1, col_b2 = st.columns([1, 4])
+        with col_b1:
+            clear_btn = st.button("🗑️ Clear Code", use_container_width=True)
+            if clear_btn:
+                st.session_state.current_editor_code = ""
+                st.rerun()
+
+    # -------------------------------------------------------------
+    # METHOD A: FILE UPLOAD
+    # -------------------------------------------------------------
+    with input_tab2:
+        uploaded_file = st.file_uploader(
+            "Upload Source Code File",
+            type=["py", "java", "c", "h"],
+            help="Supported formats: Python (.py), Java (.java), C (.c, .h). Max file size: 5MB"
+        )
+        if uploaded_file is not None:
+            # File size validation (limit to 5MB)
+            if uploaded_file.size > 5 * 1024 * 1024:
+                st.error("❌ File size exceeds 5MB limit. Please upload a smaller source file.")
+            else:
+                target_filename = uploaded_file.name
+                selected_language = code_analyzer.detect_language_from_filename(target_filename)
+                try:
+                    source_code_input = uploaded_file.getvalue().decode("utf-8")
+                    st.success(f"✅ Loaded '{target_filename}' ({len(source_code_input.splitlines())} lines) - Detected Language: **{selected_language}**")
+                    with st.expander("Preview Uploaded Code", expanded=True):
+                        st.code(source_code_input, language=selected_language.lower())
+                except Exception as e:
+                    st.error(f"❌ Failed to decode file: {e}")
+
+    # Threshold configuration expander
+    with st.expander("⚙️ Advanced Machine Learning Settings", expanded=False):
+        decision_threshold = st.slider(
+            "Defect Classification Decision Threshold",
+            min_value=0.10,
+            max_value=0.80,
+            value=0.30,
+            step=0.05,
+            help="Decision boundary for flagging DEFECTIVE vs NON-DEFECTIVE. (NASA notebook optimal F1 threshold: 0.30)"
         )
 
-    else:
+    # ANALYZE BUTTON
+    analyze_submitted = st.button("🚀 Analyze Source Code", type="primary", use_container_width=True)
 
-        difficulty = 0.0
-
-    effort = volume * difficulty
-
-    if difficulty > 0:
-
-        intelligence = volume / difficulty
-
-    else:
-
-        intelligence = 0.0
-
-    time_required = effort / 18
-
-    # Halstead estimated delivered bugs
-    bugs = volume / 3000
-
-    return {
-        "program_length": program_length,
-        "volume": volume,
-        "difficulty": difficulty,
-        "intelligence": intelligence,
-        "effort": effort,
-        "time": time_required,
-        "bugs": bugs,
-        "unique_operators": unique_operators,
-        "unique_operands": unique_operands,
-        "total_operators": total_operators,
-        "total_operands": total_operands
-    }
-
-
-# ============================================================
-# METRIC EXTRACTION
-# ============================================================
-
-def extract_metrics(source):
-
-    lines = source.splitlines()
-
-    total_lines = len(lines)
-
-    blank_lines = 0
-    comment_lines = 0
-    code_lines = 0
-    code_comment_lines = 0
-
-    for line in lines:
-
-        stripped = line.strip()
-
-        if not stripped:
-
-            blank_lines += 1
-
-        elif stripped.startswith("#"):
-
-            comment_lines += 1
-
+    if analyze_submitted:
+        if not source_code_input.strip():
+            st.warning("⚠️ Please provide source code before analyzing.")
         else:
-
-            code_lines += 1
-
-            # Inline comment
-            if "#" in line:
-
-                code_comment_lines += 1
-
-    # -------------------------
-    # Syntax
-    # -------------------------
-
-    try:
-
-        tree = ast.parse(source)
-
-        syntax_error = None
-
-    except SyntaxError as e:
-
-        tree = None
-
-        syntax_error = e
-
-    # -------------------------
-    # Token analysis
-    # -------------------------
-
-    operators, operands, comments = tokenize_code(source)
-
-    halstead = calculate_halstead(
-        operators,
-        operands
-    )
-
-    # -------------------------
-    # AST analysis
-    # -------------------------
-
-    analyzer = CodeAnalyzer()
-
-    if tree is not None:
-
-        analyzer.visit(tree)
-
-    # -------------------------
-    # McCabe-like complexity
-    # -------------------------
-
-    cyclomatic = (
-        1
-        +
-        analyzer.conditions
-        +
-        analyzer.loops
-        +
-        analyzer.exceptions
-    )
-
-    # Approximation of essential complexity
-    essential = max(
-        1,
-        cyclomatic
-    )
-
-    # Approximation of design complexity
-    design = max(
-        1,
-        analyzer.functions +
-        analyzer.classes
-    )
-
-    # -------------------------
-    # 21 MODEL FEATURES
-    # -------------------------
-
-    metrics = {
-
-        "loc":
-            float(total_lines),
-
-        "cyclomatic_complexity":
-            float(cyclomatic),
-
-        "essential_complexity":
-            float(essential),
-
-        "design_complexity":
-            float(design),
-
-        "halstead_total_operators_operands":
-            float(
-                halstead["program_length"]
-            ),
-
-        "halstead_volume":
-            float(
-                halstead["volume"]
-            ),
-
-        "halstead_program_length":
-            float(
-                halstead["program_length"]
-            ),
-
-        "halstead_difficulty":
-            float(
-                halstead["difficulty"]
-            ),
-
-        "halstead_intelligence":
-            float(
-                halstead["intelligence"]
-            ),
-
-        "halstead_effort":
-            float(
-                halstead["effort"]
-            ),
-
-        "halstead_bugs":
-            float(
-                halstead["bugs"]
-            ),
-
-        "halstead_time":
-            float(
-                halstead["time"]
-            ),
-
-        "loc_code":
-            float(code_lines),
-
-        "loc_comment":
-            float(comment_lines),
-
-        "loc_blank":
-            float(blank_lines),
-
-        "loc_code_and_comment":
-            float(code_comment_lines),
-
-        "unique_operators":
-            float(
-                halstead["unique_operators"]
-            ),
-
-        "unique_operands":
-            float(
-                halstead["unique_operands"]
-            ),
-
-        "total_operators":
-            float(
-                halstead["total_operators"]
-            ),
-
-        "total_operands":
-            float(
-                halstead["total_operands"]
-            ),
-
-        "branch_count":
-            float(analyzer.branches)
-    }
-
-    extra = {
-
-        "functions":
-            analyzer.functions,
-
-        "classes":
-            analyzer.classes,
-
-        "loops":
-            analyzer.loops,
-
-        "conditions":
-            analyzer.conditions,
-
-        "branches":
-            analyzer.branches,
-
-        "calls":
-            analyzer.calls,
-
-        "max_nesting":
-            analyzer.max_nesting,
-
-        "dangerous_calls":
-            analyzer.dangerous_calls,
-
-        "divisions":
-            analyzer.divisions,
-
-        "syntax_error":
-            syntax_error,
-
-        "operators":
-            operators,
-
-        "operands":
-            operands
-    }
-
-    return metrics, extra
-
-
-# ============================================================
-# CODE-LEVEL RISK SCORE
-# ============================================================
-
-def calculate_code_risk(metrics, extra, source):
-
-    risk = 0.0
-
-    # --------------------------------
-    # Syntax error
-    # --------------------------------
-
-    if extra["syntax_error"] is not None:
-
-        return 100.0
-
-    # --------------------------------
-    # Complexity
-    # --------------------------------
-
-    risk += min(
-        extra["max_nesting"] * 4,
-        20
-    )
-
-    risk += min(
-        extra["branches"] * 2,
-        20
-    )
-
-    risk += min(
-        extra["loops"] * 2,
-        10
-    )
-
-    risk += min(
-        extra["conditions"] * 1.5,
-        10
-    )
-
-    # --------------------------------
-    # Code size
-    # --------------------------------
-
-    loc = metrics["loc_code"]
-
-    if loc > 50:
-        risk += 5
-
-    if loc > 100:
-        risk += 5
-
-    if loc > 200:
-        risk += 5
-
-    # --------------------------------
-    # Operator/operand complexity
-    # --------------------------------
-
-    if metrics["total_operators"] > 20:
-        risk += 5
-
-    if metrics["total_operators"] > 50:
-        risk += 5
-
-    if metrics["total_operands"] > 40:
-        risk += 5
-
-    # --------------------------------
-    # Dangerous patterns
-    # --------------------------------
-
-    risk += min(
-        extra["dangerous_calls"] * 15,
-        30
-    )
-
-    # Division operations
-    risk += min(
-        extra["divisions"] * 3,
-        12
-    )
-
-    # --------------------------------
-    # Exception handling
-    # --------------------------------
-
-    if re.search(
-        r"except\s*:",
-        source
-    ):
-        risk += 8
-
-    # --------------------------------
-    # TODO / FIXME
-    # --------------------------------
-
-    todo_count = len(
-        re.findall(
-            r"\b(TODO|FIXME|BUG)\b",
-            source,
-            re.IGNORECASE
-        )
-    )
-
-    risk += min(
-        todo_count * 5,
-        15
-    )
-
-    # --------------------------------
-    # Mutable default arguments
-    # --------------------------------
-
-    if re.search(
-        r"def\s+\w+\([^)]*=\s*(\[\]|\{\})",
-        source
-    ):
-        risk += 10
-
-    # --------------------------------
-    # Very long lines
-    # --------------------------------
-
-    long_lines = sum(
-        1
-        for line in source.splitlines()
-        if len(line) > 100
-    )
-
-    risk += min(
-        long_lines * 2,
-        10
-    )
-
-    return min(
-        round(risk, 2),
-        100.0
-    )
-
-
-# ============================================================
-# ANALYZE BUTTON
-# ============================================================
-
-if st.button(
-    "🔍 Analyze Code",
-    type="primary",
-    use_container_width=True
-):
-
-    if not code.strip():
-
-        st.warning(
-            "Please enter Python code first."
-        )
-
-        st.stop()
-
-    # --------------------------------
-    # Extract metrics
-    # --------------------------------
-
-    metrics, extra = extract_metrics(
-        code
-    )
-
-    # --------------------------------
-    # Syntax error
-    # --------------------------------
-
-    if extra["syntax_error"] is not None:
-
-        st.error("❌ Python syntax error detected.")
-
-        st.code(
-            str(extra["syntax_error"])
-        )
-
-        st.info(
-            "Syntax errors are classified as defective "
-            "for this demonstration."
-        )
-
-        st.metric(
-            "Defect Probability",
-            "100.00%"
-        )
-
-        st.error(
-            "🔴 DEFECTIVE"
-        )
-
-        st.stop()
-
-    # --------------------------------
-    # DataFrame for model
-    # --------------------------------
-
-    input_data = pd.DataFrame(
-        [
-            [
-                metrics[feature]
-                for feature in FEATURES
-            ]
-        ],
-        columns=FEATURES
-    )
-
-    # --------------------------------
-    # Random Forest prediction
-    # --------------------------------
-
-    probabilities = model.predict_proba(
-        input_data
-    )[0]
-
-    classes = list(
-        model.classes_
-    )
-
-    if 1 in classes:
-
-        defect_index = classes.index(1)
-
-        rf_probability = float(
-            probabilities[defect_index]
-        )
-
+            with st.spinner(f"Analyzing {selected_language} code using AST, compilers, complexity extractors, and Random Forest model..."):
+                try:
+                    analysis_res = code_analyzer.analyze_source_code(
+                        source_code=source_code_input,
+                        file_name=target_filename,
+                        language=selected_language,
+                        user_id=user_id,
+                        threshold=decision_threshold,
+                        save_to_db=True
+                    )
+                    st.session_state["latest_analysis"] = analysis_res
+                    st.success("✅ Analysis completed and saved to history!")
+                except Exception as e:
+                    st.error(f"❌ Error during code analysis: {e}")
+
+    # DISPLAY ANALYSIS RESULTS IF AVAILABLE
+    if "latest_analysis" in st.session_state and st.session_state["latest_analysis"]:
+        res = st.session_state["latest_analysis"]
+
+        st.divider()
+        st.markdown("### 📋 Analysis Results")
+
+        # Top summary cards
+        r1, r2, r3, r4 = st.columns(4)
+        with r1:
+            st.metric("Target File", res["file_name"])
+        with r2:
+            st.metric("Language", res["programming_language"])
+        with r3:
+            st.metric("Total Lines", res["total_lines"])
+        with r4:
+            st.metric("Software Health Score", f"{res['health_score']}/100")
+
+        # Machine Learning Defect Prediction Banner
+        pred_label = res["prediction_result"]
+        prob_pct = res["defect_probability"] * 100.0
+
+        pcol1, pcol2, pcol3 = st.columns([1.5, 1, 1])
+        with pcol1:
+            if "DEFECTIVE" in pred_label and "NON" not in pred_label:
+                st.error(f"### 🔴 PREDICTION: {pred_label}")
+            else:
+                st.success(f"### 🟢 PREDICTION: {pred_label}")
+            st.caption(f"Decision Threshold: {res['threshold_used'] * 100:.0f}%")
+
+        with pcol2:
+            st.metric("Composite Defect Probability", f"{prob_pct:.2f}%")
+        with pcol3:
+            st.metric("Random Forest Pure Probability", f"{res['ml_probability'] * 100:.2f}%")
+
+        # Domain Validation Badge
+        st.info(f"**Validation Status:** `{res['validation_status']}` — {res['compatibility_note']}")
+
+        # Download PDF Report Button
+        pdf_path = report_generator.generate_pdf_report(res, user_info=user)
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as pdf_file:
+                st.download_button(
+                    label="📑 Download Full PDF Audit Report",
+                    data=pdf_file,
+                    file_name=os.path.basename(pdf_path),
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+        # Tabbed Details: Detected Issues, 21 NASA Metrics, Source Code
+        tab_issues, tab_metrics, tab_src = st.tabs(["⚠️ Detected Issues & Corrections", "📊 21 NASA Software Metrics", "📄 Source Code"])
+
+        with tab_issues:
+            issues = res.get("issues", [])
+            if issues:
+                st.write(f"**Total Findings:** {len(issues)} issues detected")
+                for iss in issues:
+                    sev = iss.get("severity", "Medium")
+                    line_no = iss.get("line_number") or "N/A"
+                    tool = iss.get("tool_name", "Static Analyzer")
+                    desc = iss.get("description", "")
+                    sol = iss.get("suggested_solution", "")
+                    itype = iss.get("issue_type", "General")
+
+                    sev_emoji = {
+                        "Critical": "🔴",
+                        "High": "🟠",
+                        "Medium": "🟡",
+                        "Low": "🔵",
+                        "Informational": "ℹ️"
+                    }.get(sev, "⚠️")
+
+                    with st.expander(f"{sev_emoji} [{sev}] Line {line_no}: {itype} ({tool})"):
+                        st.markdown(f"**Description:** {desc}")
+                        if sol:
+                            st.success(f"💡 **Suggested Fix:** {sol}")
+            else:
+                st.success("🎉 No static syntax errors, memory leaks, or coding issues detected!")
+
+        with tab_metrics:
+            st.write("Exact 21 software features extracted and supplied to the Random Forest model:")
+            metrics_dict = res.get("software_metrics", {})
+            m_df = pd.DataFrame([
+                {"Metric Feature": k, "Value": v}
+                for k, v in metrics_dict.items()
+            ])
+            st.dataframe(m_df, use_container_width=True, hide_index=True)
+
+        with tab_src:
+            st.code(res.get("source_code", ""), language=res["programming_language"].lower())
+
+
+# =====================================================================
+# PAGE 3: ANALYSIS HISTORY
+# =====================================================================
+elif selected_page == "📜 Analysis History":
+    st.markdown('<div class="main-header">📜 Personal Analysis History</div>', unsafe_allow_html=True)
+    st.caption("Review previous source code inspections, inspect stored metrics, and re-download audit reports.")
+
+    analyses = db.get_user_analyses(user_id, limit=100)
+
+    if analyses:
+        history_df = pd.DataFrame(analyses)
+        st.write(f"Total analyses on record: **{len(analyses)}**")
+
+        for item in analyses:
+            a_id = item["analysis_id"]
+            fname = item["file_name"]
+            lang = item["programming_language"]
+            pred = item["prediction_result"]
+            prob = item["defect_probability"]
+            dt = item["analysis_date"]
+            errs = item["error_count"]
+            warns = item["warning_count"]
+
+            prob_str = f"{prob * 100:.1f}%" if prob is not None else "N/A"
+            icon = "🔴" if "DEFECTIVE" in pred and "NON" not in pred else "🟢"
+
+            with st.expander(f"{icon} #{a_id} | {fname} ({lang}) — {pred} ({prob_str}) | {dt}"):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.write(f"**Errors Flagged:** {errs}")
+                    st.write(f"**Warnings:** {warns}")
+                with c2:
+                    st.write(f"**Lines of Code:** {item['total_lines']}")
+                with c3:
+                    if st.button(f"🔍 View Full Details #{a_id}", key=f"view_{a_id}"):
+                        full_record = db.get_analysis_by_id(a_id, user_id=user_id)
+                        if full_record:
+                            st.session_state["latest_analysis"] = full_record
+                            st.session_state.current_page = "🔍 New Code Analysis"
+                            st.rerun()
+
+                del_col, _ = st.columns([1, 4])
+                with del_col:
+                    if st.button("🗑️ Delete Record", key=f"del_{a_id}"):
+                        db.delete_analysis(a_id, user_id=user_id)
+                        st.success(f"Record #{a_id} deleted.")
+                        st.rerun()
     else:
+        st.info("No analysis history found. Run your first analysis from the 'New Code Analysis' menu!")
 
-        rf_probability = 0.0
 
-    # --------------------------------
-    # Code-level static risk
-    # --------------------------------
+# =====================================================================
+# PAGE 4: GENERATED REPORTS
+# =====================================================================
+elif selected_page == "📑 Generated Reports":
+    st.markdown('<div class="main-header">📑 Generated PDF Audit Reports</div>', unsafe_allow_html=True)
+    st.caption("Download and print all previously generated defect prediction PDF audit reports.")
 
-    code_risk = calculate_code_risk(
-        metrics,
-        extra,
-        code
-    )
+    reports = db.get_reports_for_user(user_id)
+    if reports:
+        for r in reports:
+            rep_path = r["report_path"]
+            fname = r["file_name"]
+            lang = r["programming_language"]
+            pred = r["prediction_result"]
+            gen_at = r["generated_at"]
 
-    # --------------------------------
-    # Hybrid probability
-    #
-    # 70% ML model
-    # 30% static code analysis
-    # --------------------------------
-
-    final_probability = (
-        (rf_probability * 0.70)
-        +
-        ((code_risk / 100) * 0.30)
-    )
-
-    final_probability = min(
-        max(final_probability, 0.0),
-        1.0
-    )
-
-    # --------------------------------
-    # 50% decision threshold
-    # --------------------------------
-
-    THRESHOLD = 0.50
-
-    if final_probability >= THRESHOLD:
-
-        prediction = "DEFECTIVE"
-
+            with st.container():
+                rc1, rc2 = st.columns([3, 1])
+                with rc1:
+                    st.markdown(f"**{fname}** (`{lang}`) — *{pred}* | Generated on: {gen_at}")
+                    st.caption(f"Path: `{rep_path}`")
+                with rc2:
+                    if os.path.exists(rep_path):
+                        with open(rep_path, "rb") as f:
+                            st.download_button(
+                                label="📥 Download PDF",
+                                data=f,
+                                file_name=os.path.basename(rep_path),
+                                mime="application/pdf",
+                                key=f"rep_down_{r['report_id']}",
+                                use_container_width=True
+                            )
+                    else:
+                        st.caption("File moved/missing on disk")
+                st.divider()
     else:
+        st.info("No PDF reports generated yet. Analyze code and click 'Download PDF Audit Report' to produce formal reports.")
 
-        prediction = "NON-DEFECTIVE"
 
-    # ========================================================
-    # RESULT
-    # ========================================================
+# =====================================================================
+# PAGE 5: USER PROFILE
+# =====================================================================
+elif selected_page == "👤 User Profile":
+    st.markdown('<div class="main-header">👤 User Profile & Workspace Settings</div>', unsafe_allow_html=True)
 
-    st.divider()
-
-    st.subheader(
-        "Prediction Result"
-    )
-
-    col1, col2, col3 = st.columns(3)
-
+    col1, col2 = st.columns([2, 1])
     with col1:
-
-        st.metric(
-            "Defect Probability",
-            f"{final_probability * 100:.2f}%"
-        )
+        st.write(f"**Full Name:** {user['full_name']}")
+        st.write(f"**Username:** @{user['username']}")
+        st.write(f"**Email Address:** {user['email']}")
+        st.write(f"**Account Role:** `{user['role'].upper()}`")
+        st.write(f"**User ID:** #{user['user_id']}")
 
     with col2:
-
-        st.metric(
-            "Static Code Risk",
-            f"{code_risk:.2f}%"
-        )
-
-    with col3:
-
-        st.metric(
-            "Random Forest Probability",
-            f"{rf_probability * 100:.2f}%"
-        )
-
-    if prediction == "DEFECTIVE":
-
-        st.error(
-            "🔴 DEFECTIVE"
-        )
-
-    else:
-
-        st.success(
-            "🟢 NON-DEFECTIVE"
-        )
-
-    st.caption(
-        "Decision threshold: 50%"
-    )
-
-    # ========================================================
-    # BASIC CODE INFORMATION
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "Python Code Analysis"
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-
-        st.metric(
-            "Lines of Code",
-            int(metrics["loc_code"])
-        )
-
-    with c2:
-
-        st.metric(
-            "Operators",
-            int(metrics["total_operators"])
-        )
-
-    with c3:
-
-        st.metric(
-            "Operands",
-            int(metrics["total_operands"])
-        )
-
-    with c4:
-
-        st.metric(
-            "Branches",
-            int(metrics["branch_count"])
-        )
-
-    c5, c6, c7, c8 = st.columns(4)
-
-    with c5:
-
-        st.metric(
-            "Functions",
-            extra["functions"]
-        )
-
-    with c6:
-
-        st.metric(
-            "Conditions",
-            extra["conditions"]
-        )
-
-    with c7:
-
-        st.metric(
-            "Loops",
-            extra["loops"]
-        )
-
-    with c8:
-
-        st.metric(
-            "Max Nesting",
-            extra["max_nesting"]
-        )
-
-    # ========================================================
-    # OPERATOR / OPERAND DETAILS
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "Operators and Operands"
-    )
-
-    op1, op2 = st.columns(2)
-
-    with op1:
-
-        st.write(
-            "**Operators found**"
-        )
-
-        if extra["operators"]:
-
-            st.code(
-                ", ".join(
-                    extra["operators"]
-                )
-            )
-
-        else:
-
-            st.write(
-                "No operators detected."
-            )
-
-    with op2:
-
-        st.write(
-            "**Operands found**"
-        )
-
-        if extra["operands"]:
-
-            st.code(
-                ", ".join(
-                    extra["operands"]
-                )
-            )
-
-        else:
-
-            st.write(
-                "No operands detected."
-            )
-
-    # ========================================================
-    # 21 METRICS
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "21 Features"
-    )
-
-    feature_table = pd.DataFrame(
-        {
-            "Metric": FEATURES,
-            "Value": [
-                round(
-                    metrics[feature],
-                    4
-                )
-                for feature in FEATURES
-            ]
-        }
-    )
-
-    st.dataframe(
-        feature_table,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # ========================================================
-    # RISK FINDINGS
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "Code Quality Findings"
-    )
-
-    findings = []
-
-    if extra["max_nesting"] >= 4:
-
-        findings.append(
-            "⚠️ High nesting depth detected."
-        )
-
-    if extra["branches"] >= 8:
-
-        findings.append(
-            "⚠️ Large number of branches detected."
-        )
-
-    if extra["loops"] >= 4:
-
-        findings.append(
-            "⚠️ Multiple loops detected."
-        )
-
-    if extra["dangerous_calls"] > 0:
-
-        findings.append(
-            "🔴 Potentially dangerous function call detected."
-        )
-
-    if extra["divisions"] > 0:
-
-        findings.append(
-            "⚠️ Division operation detected; zero-denominator "
-            "handling should be checked."
-        )
-
-    if re.search(
-        r"\b(TODO|FIXME|BUG)\b",
-        code,
-        re.IGNORECASE
-    ):
-
-        findings.append(
-            "⚠️ TODO/FIXME/BUG marker detected."
-        )
-
-    if not findings:
-
-        findings.append(
-            "✅ No major static-risk patterns detected."
-        )
-
-    for finding in findings:
-
-        st.write(
-            finding
-        )
-
-    # ========================================================
-    # MODEL INPUT
-    # ========================================================
-
-    with st.expander(
-        "View values sent to Random Forest"
-    ):
-
-        st.dataframe(
-            input_data,
-            use_container_width=True,
-            hide_index=True
-        )
-
-  
+        st.info("""
+        **Security & Privacy:**
+        - Passwords hashed with 12 rounds of Bcrypt.
+        - Analysis records are completely isolated per user account.
+        - NASA machine learning prediction is performed locally.
+        """)
+
+
+# =====================================================================
+# PAGE 6: ADMIN DASHBOARD (ADMINS ONLY)
+# =====================================================================
+elif selected_page == "🛡️ Admin Dashboard":
+    dashboard.render_admin_dashboard()

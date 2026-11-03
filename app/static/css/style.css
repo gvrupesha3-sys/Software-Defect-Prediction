@@ -1,0 +1,235 @@
+/* CodeDefect AI Custom Application Styles */
+
+:root {
+    --primary-blue: #1e3a8a;
+    --primary-indigo: #4338ca;
+    --accent-blue: #2563eb;
+    --defect-red: #ef4444;
+    --clean-green: #10b981;
+    --warning-amber: #f59e0b;
+    --sidebar-width: 260px;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1f2937;
+    background-color: #f8fafc;
+}
+
+/* Sidebar Styles */
+#wrapper {
+    overflow-x: hidden;
+}
+
+.sidebar {
+    width: var(--sidebar-width);
+    min-height: 100vh;
+    background-color: #0f172a !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.brand-icon {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+    background-color: #1e293b !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.sidebar-nav .nav-link {
+    color: #94a3b8;
+    padding: 0.7rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    margin: 0.15rem 0.75rem;
+    transition: all 0.2s ease-in-out;
+}
+
+.sidebar-nav .nav-link i {
+    font-size: 1.1rem;
+    vertical-align: -0.15rem;
+}
+
+.sidebar-nav .nav-link:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-nav .nav-link.active {
+    color: #ffffff;
+    background: linear-gradient(90deg, #2563eb, #1d4ed8);
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.badge-role {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+    letter-spacing: 0.05rem;
+}
+
+/* Modern Card Styles */
+.card {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    background-color: #ffffff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.06);
+}
+
+.card-header {
+    background-color: transparent;
+    border-bottom: 1px solid #f1f5f9;
+    font-weight: 600;
+}
+
+/* Metric Cards */
+.metric-card {
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-card .metric-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+}
+
+.metric-card .metric-value {
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.metric-card .metric-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+/* Code Editor and Monospace Elements */
+.code-editor-area {
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace !important;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    background-color: #0f172a;
+    color: #f8fafc;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+    tab-size: 4;
+}
+
+.code-editor-area:focus {
+    background-color: #0b1120;
+    color: #ffffff;
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 0.25rem rgba(56, 189, 248, 0.25);
+}
+
+.code-preview-block {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    background-color: #0f172a;
+    color: #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+/* Custom Severity Badges */
+.badge-sev-critical {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+
+.badge-sev-high {
+    background-color: #ffedd5;
+    color: #c2410c;
+    border: 1px solid #fdba74;
+}
+
+.badge-sev-medium {
+    background-color: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fcd34d;
+}
+
+.badge-sev-low {
+    background-color: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #7dd3fc;
+}
+
+.badge-sev-info {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
+/* Progress & Gauge Bars */
+.progress-defect {
+    height: 12px;
+    border-radius: 6px;
+    background-color: #e2e8f0;
+}
+
+/* Custom Nav Tabs */
+.nav-tabs .nav-link {
+    font-weight: 500;
+    color: #64748b;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.75rem 1.25rem;
+}
+
+.nav-tabs .nav-link.active {
+    color: #2563eb;
+    border-bottom: 2px solid #2563eb;
+    background: transparent;
+    font-weight: 600;
+}
+
+/* Auth Cards */
+.auth-card {
+    width: 100%;
+    max-width: 440px;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive sidebar toggling */
+@media (max-width: 768px) {
+    .sidebar {
+        margin-left: calc(-1 * var(--sidebar-width));
+        position: fixed;
+        z-index: 1050;
+        transition: margin 0.25s ease-out;
+    }
+    .sidebar.show {
+        margin-left: 0;
+    }
+}
