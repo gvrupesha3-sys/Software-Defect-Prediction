@@ -24,3 +24,10 @@ reports/*.pdf
 .idea/
 Thumbs.db
 .DS_Store
+
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+__pycache__/
